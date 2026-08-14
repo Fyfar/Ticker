@@ -159,6 +159,23 @@ There's no dynamic allocation anywhere in this library: no `malloc`, no `new`, n
 - **A repeating ticker holds its long-term rate, and skips missed periods rather than queueing them.** Deadlines advance on a fixed grid laid down when you called `attach*`, so the interrupt overhead above does not accumulate: the average rate stays exactly what you asked for, and a 1 kHz ticker does not lose time against a wall clock. Individual gaps between callbacks still vary by that overhead, so this is a locked long-term rate, not a locked gap. If a period is missed entirely, because a callback ran long or the interval is shorter than the ISR floor, the ticker resyncs to the present instead of firing repeatedly to work off a backlog. You never get a catch-up storm, and a ticker asked to run faster than the hardware allows degrades to simply running as fast as it can.
 - **Global `Ticker` instances don't depend on C++ constructors running.** `ch32fun` gates `__attribute__((constructor))` support behind a flag that defaults off, so a `Ticker` declared at file scope works correctly either way: its zero-initialized state is already valid, and the real setup happens inside `attach()`, not the constructor.
 
+## Contributing
+
+`main` is protected. Every change, including my own, goes through a branch and a pull request:
+
+```sh
+git switch -c my-change
+# ... commit ...
+git push -u origin my-change
+gh pr create
+```
+
+CI builds the PlatformIO example and all three Makefile examples, and validates the registry manifest, on every pull request. That has to pass before a merge.
+
+### Releasing
+
+Merging to `main` publishes to the PlatformIO registry, but only when `library.json` names a version that isn't published yet. Registry versions are immutable, so releasing is deliberately opt-in: bump `version` in `library.json` in your PR and the merge releases it, leave it alone and the merge is just a merge. A README fix does not accidentally cut a release, and a source change never republishes over an existing version. The workflow tags `vX.Y.Z` on a successful publish.
+
 ## Issues and pull requests
 
 Both are welcome, especially reports from real hardware. The clock-rate assumption mentioned under board support was reasoned through from documentation and a rule that holds on comparable chips, not confirmed on a board. If you've got one of the affected chips on your desk, a scope trace showing whether intervals come out correct is worth more than any amount of further reading on my end.

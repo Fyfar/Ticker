@@ -1,0 +1,135 @@
+name: CI
+
+# Build on every pull request, and on main after a merge. Publishing to the
+# PlatformIO registry happens only on main, and only when library.json names a
+# version that is not there yet -- see the publish job for why.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive # the Makefile examples build against ch32fun
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('library.json', 'examples/pio_ticker_blink/platformio.ini') }}
+          restore-keys: pio-${{ runner.os }}-
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Build the PlatformIO example
+        # Also installs the ch32v platform and its RISC-V toolchain, which the
+        # Makefile step below then reuses.
+        run: pio run -d examples/pio_ticker_blink
+
+      - name: Build the Makefile examples
+        # ch32fun.mk picks a toolchain off PATH by trying a list of prefixes,
+        # none of which match the one PlatformIO ships. PREFIX is overridable,
+        # so point it straight at the toolchain the previous step installed
+        # rather than pulling a second one from apt.
+        #
+        # Flash figures here will not match the README: this toolchain is older
+        # than the GCC those numbers were measured with, and optimises less
+        # aggressively. This step checks that the code still compiles and links,
+        # not how large it is.
+        run: |
+          TOOLCHAIN=$(ls -d ~/.platformio/packages/toolchain-riscv*/bin | head -1)
+          test -n "$TOOLCHAIN" || { echo "::error::RISC-V toolchain not found"; exit 1; }
+          for ex in ticker_blink ticker_multi ticker_oneshot; do
+            echo "::group::$ex"
+            make -C "examples/$ex" PREFIX="$TOOLCHAIN/riscv-none-embed" "$ex.elf"
+            echo "::endgroup::"
+          done
+
+      - name: Validate the registry manifest
+        # Catches a malformed library.json, and a broken export list, before it
+        # can reach the registry -- where versions are immutable and a bad one
+        # can only be superseded, never replaced.
+        run: |
+          pio pkg pack -o /tmp/pkg.tar.gz
+          echo "Package contents:"
+          tar tzf /tmp/pkg.tar.gz | sort
+
+  publish:
+    name: Publish to PlatformIO Registry
+    needs: build
+    # Only on a real push to main, never on a pull request, and never from a
+    # fork. Merging a PR into main is what triggers a release.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # to push the release tag
+    steps:
+      - uses: actions/checkout@v4
+
+      # The version check runs first and needs nothing but curl and python, so
+      # a commit that does not bump the version (a README fix, a CI tweak)
+      # finishes here in seconds instead of installing a toolchain it will not
+      # use. Everything below is skipped on that path.
+      - name: Is this version already published?
+        id: check
+        # Registry versions are immutable: republishing an existing version is
+        # an error, so without this guard every commit to main that did not bump
+        # library.json would fail the build. Releasing is therefore opt-in --
+        # bump the version and the next merge publishes it.
+        run: |
+          VERSION=$(python3 -c "import json; print(json.load(open('library.json'))['version'])")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          PUBLISHED=$(curl -sf "https://api.registry.platformio.org/v3/packages/fyfar/library/Ticker" \
+            | python3 -c "import json,sys; print(' '.join(v['name'] for v in json.load(sys.stdin)['versions']))" \
+            || echo "")
+          echo "Local version: $VERSION"
+          echo "Published:     ${PUBLISHED:-<none>}"
+          if echo " $PUBLISHED " | grep -q " $VERSION "; then
+            echo "new=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Version $VERSION is already published. Bump library.json to release."
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v5
+        if: steps.check.outputs.new == 'true'
+        with:
+          python-version: "3.x"
+
+      - name: Install PlatformIO
+        if: steps.check.outputs.new == 'true'
+        run: pip install --upgrade platformio
+
+      - name: Publish
+        if: steps.check.outputs.new == 'true'
+        env:
+          PLATFORMIO_AUTH_TOKEN: ${{ secrets.PLATFORMIO_AUTH_TOKEN }}
+        run: |
+          if [ -z "$PLATFORMIO_AUTH_TOKEN" ]; then
+            echo "::error::PLATFORMIO_AUTH_TOKEN secret is not set. Generate one with 'pio account token' and add it under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          pio pkg publish . --no-interactive
+
+      - name: Tag the release
+        if: steps.check.outputs.new == 'true'
+        # VERSION goes through the environment rather than being interpolated
+        # into the script body. It comes from a file in this repo so it is not
+        # attacker-controlled, but expanding workflow expressions directly into
+        # a shell is the habit that makes the next one an injection.
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+        run: |
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
