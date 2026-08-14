@@ -1,0 +1,44 @@
+{
+  "name": "Ticker",
+  "version": "0.1.0",
+  "description": "Attach/detach callback timers for CH32V-family RISC-V microcontrollers, built directly on ch32fun. Every Ticker instance is multiplexed onto a single TIM2 through an interrupt-driven chained rearm scheme, so callbacks fire on schedule regardless of what the main loop is doing. No Arduino core, no HAL, no dynamic allocation. Verified on real CH32V003 hardware from 10 microseconds to 1 second with no accumulating drift.",
+  "keywords": [
+    "timer",
+    "ticker",
+    "scheduler",
+    "interrupt",
+    "ch32v003",
+    "ch32fun",
+    "riscv",
+    "wch",
+    "bare-metal"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Fyfar/Ticker.git"
+  },
+  "authors": [
+    {
+      "name": "Yurii Kucherenko",
+      "url": "https://github.com/Fyfar",
+      "maintainer": true
+    }
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/Fyfar/Ticker",
+  "frameworks": "ch32v003fun",
+  "platforms": "ch32v",
+  "headers": "Ticker.h",
+  "build": {
+    "srcDir": "src"
+  },
+  "export": {
+    "include": [
+      "src",
+      "examples/pio_ticker_blink",
+      "README.md",
+      "LICENSE",
+      "library.json"
+    ]
+  }
+}

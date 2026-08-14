@@ -45,7 +45,23 @@ Verified on real CH32V003 hardware against a 24 MHz crystal: intervals from 10 m
 
 ## Installation
 
-There's no package manager entry for this yet, on the Arduino Library Manager or the PlatformIO registry, since it isn't an Arduino library. Add it to a ch32fun project by hand:
+### PlatformIO
+
+Add the dependency to `platformio.ini`. Nothing else is needed; the library compiles into your project automatically.
+
+```ini
+[env:genericCH32V003F4P6]
+platform = ch32v
+board = genericCH32V003F4P6
+framework = ch32v003fun
+lib_deps = Fyfar/Ticker
+```
+
+`ch32fun` comes from the framework, so there's no submodule to manage. See [`examples/pio_ticker_blink`](examples/pio_ticker_blink) for a complete project, and remember that ch32fun expects a `funconfig.h` to exist in your own `src/` even if it's empty.
+
+### By hand, with a Makefile
+
+The Makefile examples in this repository use ch32fun directly, without PlatformIO:
 
 1. Get `ch32fun` into your project. The examples here use a git submodule at `ch32fun/`.
 2. Copy `src/Ticker.h` and `src/Ticker.cpp` into your project, or add this repository as a submodule and point your include path at its `src/` directory.
@@ -74,6 +90,7 @@ void detach();
 - [`examples/ticker_blink`](examples/ticker_blink): one repeating ticker, the smallest useful setup.
 - [`examples/ticker_multi`](examples/ticker_multi): two independent tickers running at different rates.
 - [`examples/ticker_oneshot`](examples/ticker_oneshot): a one-shot timeout alongside a repeating ticker that detaches itself from inside its own callback.
+- [`examples/pio_ticker_blink`](examples/pio_ticker_blink): the same blink, as a PlatformIO project rather than a Makefile one.
 
 Each has a `Makefile` that expects the `ch32fun` submodule at `../../ch32fun` and this library's `src/` at `../../src`. Run `make TARGET_MCU=CH32V003` (or another supported chip) from inside the example directory.
 
