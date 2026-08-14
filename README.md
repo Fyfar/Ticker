@@ -1,8 +1,13 @@
 # Ticker
 
-![version](https://img.shields.io/badge/version-0.1.0-blue) ![contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen)
+[![PlatformIO Registry](https://badges.registry.platformio.org/packages/fyfar/library/Ticker.svg)](https://registry.platformio.org/libraries/fyfar/Ticker) ![license MIT](https://img.shields.io/badge/license-MIT-blue) ![contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen)
 
 Attach/detach callback timers for CH32V-family RISC-V microcontrollers, built directly on [ch32fun](https://github.com/cnlohr/ch32fun). No Arduino core, no HAL, no dynamic allocation. One `Ticker` type, independently named instances, the same shape as ESP32's `Ticker` class.
+
+```ini
+; platformio.ini
+lib_deps = fyfar/Ticker
+```
 
 ```cpp
 #include "ch32fun.h"
@@ -47,17 +52,25 @@ Verified on real CH32V003 hardware against a 24 MHz crystal: intervals from 10 m
 
 ### PlatformIO
 
-Add the dependency to `platformio.ini`. Nothing else is needed; the library compiles into your project automatically.
+Published on the [PlatformIO Registry](https://registry.platformio.org/libraries/fyfar/Ticker). Add one line to `platformio.ini`:
 
 ```ini
 [env:genericCH32V003F4P6]
 platform = ch32v
 board = genericCH32V003F4P6
 framework = ch32v003fun
-lib_deps = Fyfar/Ticker
+
+lib_deps = fyfar/Ticker
 ```
 
-`ch32fun` comes from the framework, so there's no submodule to manage. See [`examples/pio_ticker_blink`](examples/pio_ticker_blink) for a complete project, and remember that ch32fun expects a `funconfig.h` to exist in your own `src/` even if it's empty.
+PlatformIO downloads and compiles it on the next build. Pin a version with `fyfar/Ticker@^0.1.0` if you'd rather not pick up future releases automatically, or install from the command line with `pio pkg install --library "fyfar/Ticker"`.
+
+Two things to know:
+
+- `ch32fun` comes from the framework, so there is no submodule to manage and nothing else to configure.
+- ch32fun requires a `funconfig.h` to exist in your project's own `src/`, even when it is completely empty. Builds fail confusingly without it.
+
+Then `#include "ch32fun.h"` and `#include "Ticker.h"`. [`examples/pio_ticker_blink`](examples/pio_ticker_blink) is a complete, working project you can copy.
 
 ### By hand, with a Makefile
 
