@@ -1,17 +1,30 @@
 name: CI
 
-# Build on every pull request, and on main after a merge. Publishing to the
-# PlatformIO registry happens only on main, and only when library.json names a
-# version that is not there yet -- see the publish job for why.
+# Build every commit on every branch. Publishing to the PlatformIO registry
+# happens only on main, and only when library.json names a version that is not
+# there yet -- see the publish job for why.
 on:
   push:
-    branches: [main]
+    # '**' is every branch and, importantly, no tags. Without it this would
+    # also fire on the vX.Y.Z tag the publish job pushes, running a whole
+    # second build for a ref that can never publish anything.
+    branches: ["**"]
   pull_request:
-    branches: [main]
+
+# Superseded runs on a feature branch are pointless once you have pushed again,
+# but a publish must never be cancelled halfway, so main is exempt.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build:
     name: Build examples
+    # Now that push covers every branch, a pull request from a branch in this
+    # repository would build the same commit twice. Take the push run for
+    # those, and keep the pull_request trigger for forks, whose branches never
+    # produce a push event here.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
