@@ -80,11 +80,17 @@ jobs:
         # aggressively. This step checks that the code still compiles and links,
         # not how large it is.
         run: |
-          TOOLCHAIN=$(ls -d ~/.platformio/packages/toolchain-riscv*/bin | head -1)
-          test -n "$TOOLCHAIN" || { echo "::error::RISC-V toolchain not found"; exit 1; }
+          # The compiler's target triple is not the same on every host: it is
+          # riscv-none-embed-gcc on macOS and something else on Linux, so
+          # hardcoding the prefix builds locally and fails here. Derive it from
+          # whatever gcc the toolchain actually shipped instead of guessing.
+          GCC=$(ls "$HOME"/.platformio/packages/toolchain-riscv*/bin/*-gcc 2>/dev/null | head -1)
+          test -n "$GCC" || { echo "::error::No RISC-V gcc found in the PlatformIO toolchain"; exit 1; }
+          PREFIX="${GCC%-gcc}"
+          echo "Using toolchain prefix: $PREFIX"
           for ex in ticker_blink ticker_multi ticker_oneshot; do
             echo "::group::$ex"
-            make -C "examples/$ex" PREFIX="$TOOLCHAIN/riscv-none-embed" "$ex.elf"
+            make -C "examples/$ex" PREFIX="$PREFIX" "$ex.elf"
             echo "::endgroup::"
           done
 
