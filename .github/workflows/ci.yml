@@ -4,12 +4,20 @@ name: CI
 # happens only on main, and only when library.json names a version that is not
 # there yet -- see the publish job for why.
 on:
+  # main only, so a merge builds and can publish. Feature branches are covered
+  # by the pull_request trigger below, which also means a branch pushed while
+  # its pull request is open is not built twice. Tags are excluded, so the
+  # vX.Y.Z tag the publish job pushes does not start a second build.
   push:
-    # '**' is every branch and, importantly, no tags. Without it this would
-    # also fire on the vX.Y.Z tag the publish job pushes, running a whole
-    # second build for a ref that can never publish anything.
-    branches: ["**"]
+    branches: [main]
+
+  # Every pull request, whatever branch it targets. "synchronize" is the event
+  # that matters day to day: it fires on every new commit pushed to an open
+  # pull request, so updating a pull request rebuilds it. These three are the
+  # default set, listed explicitly because that rebuild is a requirement here
+  # rather than a coincidence.
   pull_request:
+    types: [opened, synchronize, reopened]
 
 # Superseded runs on a feature branch are pointless once you have pushed again,
 # but a publish must never be cancelled halfway, so main is exempt.
@@ -20,11 +28,6 @@ concurrency:
 jobs:
   build:
     name: Build examples
-    # Now that push covers every branch, a pull request from a branch in this
-    # repository would build the same commit twice. Take the push run for
-    # those, and keep the pull_request trigger for forks, whose branches never
-    # produce a push event here.
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
