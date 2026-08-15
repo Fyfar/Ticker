@@ -32,9 +32,32 @@ jobs:
       - name: Install PlatformIO
         run: pip install --upgrade platformio
 
-      - name: Build the PlatformIO example
+      - name: Build the PlatformIO example against this checkout
+        # Deliberately NOT "pio run -d examples/pio_ticker_blink". That example
+        # declares "lib_deps = fyfar/Ticker" so it works standalone for users,
+        # which means running it here would compile the version already on the
+        # registry and pass even if this pull request broke src/ entirely.
+        # Verified: with a #error added to src/Ticker.h, plain "pio run" still
+        # reported SUCCESS.
+        #
+        # "pio ci --lib=." builds the example's sources against this working
+        # tree instead, and does fail on that same #error. The platform and
+        # framework are repeated from the example's platformio.ini because
+        # pio ci synthesises its own project rather than reading that file.
+        #
         # Also installs the ch32v platform and its RISC-V toolchain, which the
         # Makefile step below then reuses.
+        run: |
+          pio ci --lib="." \
+            --project-option="platform=https://github.com/Community-PIO-CH32V/platform-ch32v.git" \
+            --project-option="framework=ch32v003fun" \
+            --board=genericCH32V003F4P6 \
+            examples/pio_ticker_blink/src
+
+      - name: Build the PlatformIO example as a user would get it
+        # The example must also work as a standalone copy-paste project, which
+        # is a different claim: this one resolves Ticker from the registry and
+        # validates the platformio.ini that actually ships in the package.
         run: pio run -d examples/pio_ticker_blink
 
       - name: Build the Makefile examples
