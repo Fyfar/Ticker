@@ -1,13 +1,29 @@
 name: CI
 
-# Build on every pull request, and on main after a merge. Publishing to the
-# PlatformIO registry happens only on main, and only when library.json names a
-# version that is not there yet -- see the publish job for why.
+# Build every commit on every branch. Publishing to the PlatformIO registry
+# happens only on main, and only when library.json names a version that is not
+# there yet -- see the publish job for why.
 on:
+  # main only, so a merge builds and can publish. Feature branches are covered
+  # by the pull_request trigger below, which also means a branch pushed while
+  # its pull request is open is not built twice. Tags are excluded, so the
+  # vX.Y.Z tag the publish job pushes does not start a second build.
   push:
     branches: [main]
+
+  # Every pull request, whatever branch it targets. "synchronize" is the event
+  # that matters day to day: it fires on every new commit pushed to an open
+  # pull request, so updating a pull request rebuilds it. These three are the
+  # default set, listed explicitly because that rebuild is a requirement here
+  # rather than a coincidence.
   pull_request:
-    branches: [main]
+    types: [opened, synchronize, reopened]
+
+# Superseded runs on a feature branch are pointless once you have pushed again,
+# but a publish must never be cancelled halfway, so main is exempt.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build:
@@ -32,9 +48,41 @@ jobs:
       - name: Install PlatformIO
         run: pip install --upgrade platformio
 
-      - name: Build the PlatformIO example
+      - name: Install the CH32V platform
+        # Must come before pio ci: that command validates --board against the
+        # platforms already installed, and does so before installing anything,
+        # so on a clean machine the board ID is simply unknown. Nothing in the
+        # local development setup shows this, because the platform is already
+        # there. This step also fetches the RISC-V toolchain that the Makefile
+        # step below reuses.
+        run: pio pkg install --global --platform "https://github.com/Community-PIO-CH32V/platform-ch32v.git"
+
+      - name: Build the PlatformIO example against this checkout
+        # Deliberately NOT "pio run -d examples/pio_ticker_blink". That example
+        # declares "lib_deps = fyfar/Ticker" so it works standalone for users,
+        # which means running it here would compile the version already on the
+        # registry and pass even if this pull request broke src/ entirely.
+        # Verified: with a #error added to src/Ticker.h, plain "pio run" still
+        # reported SUCCESS.
+        #
+        # "pio ci --lib=." builds the example's sources against this working
+        # tree instead, and does fail on that same #error. The platform and
+        # framework are repeated from the example's platformio.ini because
+        # pio ci synthesises its own project rather than reading that file.
+        #
         # Also installs the ch32v platform and its RISC-V toolchain, which the
         # Makefile step below then reuses.
+        run: |
+          pio ci --lib="." \
+            --project-option="platform=https://github.com/Community-PIO-CH32V/platform-ch32v.git" \
+            --project-option="framework=ch32v003fun" \
+            --board=genericCH32V003F4P6 \
+            examples/pio_ticker_blink/src
+
+      - name: Build the PlatformIO example as a user would get it
+        # The example must also work as a standalone copy-paste project, which
+        # is a different claim: this one resolves Ticker from the registry and
+        # validates the platformio.ini that actually ships in the package.
         run: pio run -d examples/pio_ticker_blink
 
       - name: Build the Makefile examples
@@ -48,11 +96,17 @@ jobs:
         # aggressively. This step checks that the code still compiles and links,
         # not how large it is.
         run: |
-          TOOLCHAIN=$(ls -d ~/.platformio/packages/toolchain-riscv*/bin | head -1)
-          test -n "$TOOLCHAIN" || { echo "::error::RISC-V toolchain not found"; exit 1; }
+          # The compiler's target triple is not the same on every host: it is
+          # riscv-none-embed-gcc on macOS and something else on Linux, so
+          # hardcoding the prefix builds locally and fails here. Derive it from
+          # whatever gcc the toolchain actually shipped instead of guessing.
+          GCC=$(ls "$HOME"/.platformio/packages/toolchain-riscv*/bin/*-gcc 2>/dev/null | head -1)
+          test -n "$GCC" || { echo "::error::No RISC-V gcc found in the PlatformIO toolchain"; exit 1; }
+          PREFIX="${GCC%-gcc}"
+          echo "Using toolchain prefix: $PREFIX"
           for ex in ticker_blink ticker_multi ticker_oneshot; do
             echo "::group::$ex"
-            make -C "examples/$ex" PREFIX="$TOOLCHAIN/riscv-none-embed" "$ex.elf"
+            make -C "examples/$ex" PREFIX="$PREFIX" "$ex.elf"
             echo "::endgroup::"
           done
 
