@@ -32,6 +32,15 @@ jobs:
       - name: Install PlatformIO
         run: pip install --upgrade platformio
 
+      - name: Install the CH32V platform
+        # Must come before pio ci: that command validates --board against the
+        # platforms already installed, and does so before installing anything,
+        # so on a clean machine the board ID is simply unknown. Nothing in the
+        # local development setup shows this, because the platform is already
+        # there. This step also fetches the RISC-V toolchain that the Makefile
+        # step below reuses.
+        run: pio pkg install --global --platform "https://github.com/Community-PIO-CH32V/platform-ch32v.git"
+
       - name: Build the PlatformIO example against this checkout
         # Deliberately NOT "pio run -d examples/pio_ticker_blink". That example
         # declares "lib_deps = fyfar/Ticker" so it works standalone for users,
