@@ -42,6 +42,16 @@ A single hardware timer (TIM2) is multiplexed across every attached `Ticker` usi
 
 Verified on real CH32V003 hardware against a 24 MHz crystal: intervals from 10 microseconds to 1 second are delivered exactly, with no accumulating drift.
 
+## Features
+
+Why this instead of configuring TIM2 by hand, or another timer library:
+
+- **One timer, any number of callbacks.** Attach up to `TICKER_MAX_TICKERS` independent, differently-timed callbacks without claiming a hardware timer per callback — there are only two on CH32V003 to begin with.
+- **No drift, no catch-up storms.** Deadlines advance on a fixed grid laid down at `attach()` time, so a repeating ticker holds its long-term rate exactly, and a missed period resyncs to the present instead of firing repeatedly to work off a backlog.
+- **No dynamic allocation.** No `malloc`, no `new`, nothing that can fragment or fail unpredictably on a 2 KB chip. Every ticker is a fixed-size static array slot.
+- **A known, measured footprint.** One ticker costs 1088 B flash and 64 B RAM on CH32V003 (see [Flash and RAM](#flash-and-ram)) — worth checking against the space you actually have before wiring it in.
+- **A familiar shape.** Same `attach`/`once`/`detach` API as ESP32's `Ticker` class, if you've used that before.
+
 ## Prerequisites
 
 - A RISC-V GCC toolchain that can target `rv32ec`/`ilp32e` for CH32V003, or `rv32imac`/`ilp32` for the larger supported chips, for example `riscv64-unknown-elf-gcc` or `riscv-none-elf-gcc`. `ch32fun.mk` picks the first one it finds on your `PATH` automatically.
@@ -149,12 +159,23 @@ TIM2 is claimed exclusively by this library. Don't configure it elsewhere in a p
 
 Ticker callbacks run inside TIM2's interrupt handler. Keep them short. A callback that blocks or runs long delays every other attached ticker, not just itself, since one interrupt dispatches everything that's currently due before rearming the timer.
 
-There's no dynamic allocation anywhere in this library: no `malloc`, no `new`, nothing that could fragment or fail unpredictably on a 2 KB chip. Everything is a fixed-size static array and plain function pointers.
-
 ## Limitations
 
-- **The practical floor is about 10 microseconds, not the 1 microsecond the API accepts.** Each fire costs roughly 4.5 us of interrupt entry, dispatch and rearm, measured on a CH32V003 at 48 MHz and reproduced at both SysTick rates the chip offers (27 ticks at 6 MHz, 210 ticks at 48 MHz, the same 4.4 us either way). Because deadlines advance on a fixed grid, that cost does not turn into interval error: measured against a 24 MHz crystal, requested intervals come back exact from 1 second all the way down to 10 us. Below that the ISR simply cannot cycle fast enough, and 5 us, 2 us and 1 us all deliver about 9.5 us instead. So 10 us is the shortest interval that means anything, and anything below it silently becomes "as fast as this chip can go".
-- **The maximum interval depends on your clock configuration**, because deadlines are stored as a 32-bit tick count and compared as a *signed* delta so that wraparound is handled correctly. That signed comparison is what sets the ceiling: half the 32-bit range, not all of it. On CH32V003 at its default clock (48 MHz core, SysTick at an eighth of that, so 6 MHz), it works out to about 358 seconds, just under 6 minutes. If a project sets `FUNCONF_SYSTICK_USE_HCLK=1` to run SysTick at the full core clock instead, the ceiling drops to about 44 seconds, in exchange for finer resolution per tick. The formula is `2^31 / SysTick rate in Hz`. Anything longer is rejected: `attach*` and `once*` return `false` rather than clamping to the maximum or silently firing at some unrelated rate.
+- **Minimum interval: 10 microseconds**, not the 1 microsecond the API accepts. That's a limit of the chip, not this library — no amount of code changes it. Below that floor, you still get a callback, just not at the rate you requested. Design around 10 us as the real floor.
+
+  Each fire costs roughly 4.5 us of interrupt entry, dispatch and rearm — measured on a CH32V003 at 48 MHz and reproduced at both SysTick rates the chip offers (27 ticks at 6 MHz, 210 ticks at 48 MHz, the same 4.4 us either way). That's the cost that puts the floor at 10 us: below it the ISR can't cycle fast enough to hit the requested rate, and 5 us, 2 us and 1 us all deliver about 9.5 us instead, i.e. "as fast as this chip can go" rather than the interval you asked for. It doesn't show up as jitter or error above the floor, though — deadlines advance on a fixed grid, so measured against a 24 MHz crystal, every requested interval from 10 us up to 1 second comes back exact.
+
+- **Maximum interval depends on your clock configuration.** Common cases on CH32V003:
+
+  | Clock configuration | SysTick rate | Maximum interval |
+  |---|---|---|
+  | Default (48 MHz core, SysTick at HCLK/8) | 6 MHz | ~358 s (~6 min) |
+  | `FUNCONF_SYSTICK_USE_HCLK=1` (SysTick at full core clock) | 48 MHz | ~44 s |
+
+  General formula: `2^31 / SysTick rate in Hz`. A faster SysTick gives finer resolution per tick at the cost of a lower ceiling.
+
+  The ceiling exists because deadlines are stored as a 32-bit tick count and compared as a *signed* delta so wraparound is handled correctly — that signed comparison is what caps it at half the 32-bit range, not all of it. There's no way around it other than picking a slower SysTick rate. If you need something longer, `attach*`/`once*` return `false` rather than clamping or silently firing at some unrelated rate, so chain a shorter interval and re-arm it from the callback instead of relying on one long-running ticker.
+
 - **Resolution doesn't degrade as you approach that ceiling.** A tick is a tick regardless of how close the deadline is to wrapping, since the comparison logic is wraparound-safe rather than relying on values staying small.
 - **Ten tickers by default, fixed at compile time.** Raise or lower it with `TICKER_MAX_TICKERS`; there's no dynamic growth. `attach()` and friends return `false` if the registry is already full, so check the return value if you're near the limit.
 - **A repeating ticker holds its long-term rate, and skips missed periods rather than queueing them.** Deadlines advance on a fixed grid laid down when you called `attach*`, so the interrupt overhead above does not accumulate: the average rate stays exactly what you asked for, and a 1 kHz ticker does not lose time against a wall clock. Individual gaps between callbacks still vary by that overhead, so this is a locked long-term rate, not a locked gap. If a period is missed entirely, because a callback ran long or the interval is shorter than the ISR floor, the ticker resyncs to the present instead of firing repeatedly to work off a backlog. You never get a catch-up storm, and a ticker asked to run faster than the hardware allows degrades to simply running as fast as it can.
