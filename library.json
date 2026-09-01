@@ -15,7 +15,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/Fyfar/Ticker.git"
+    "url": "https://github.com/ch32-libraries/Ticker.git"
   },
   "authors": [
     {
@@ -25,7 +25,7 @@
     }
   ],
   "license": "MIT",
-  "homepage": "https://github.com/Fyfar/Ticker",
+  "homepage": "https://github.com/ch32-libraries/Ticker",
   "frameworks": "ch32v003fun",
   "platforms": "ch32v",
   "headers": "Ticker.h",
