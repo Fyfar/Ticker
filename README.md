@@ -1,6 +1,6 @@
 # Ticker
 
-[![PlatformIO Registry](https://badges.registry.platformio.org/packages/fyfar/library/Ticker.svg)](https://registry.platformio.org/libraries/fyfar/Ticker) ![license MIT](https://img.shields.io/badge/license-MIT-blue) ![contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen)
+[![PlatformIO Registry](https://badges.registry.platformio.org/packages/fyfar/library/Ticker.svg)](https://registry.platformio.org/libraries/fyfar/Ticker) ![license ISC](https://img.shields.io/badge/license-ISC-blue) ![contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen)
 
 Attach/detach callback timers for CH32V-family RISC-V microcontrollers, built directly on [ch32fun](https://github.com/cnlohr/ch32fun). No Arduino core, no HAL, no dynamic allocation. One `Ticker` type, independently named instances, the same shape as ESP32's `Ticker` class.
 
@@ -187,4 +187,4 @@ Both are welcome, especially reports from real hardware. The clock-rate assumpti
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+ISC. See [LICENSE](LICENSE).

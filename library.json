@@ -24,7 +24,7 @@
       "maintainer": true
     }
   ],
-  "license": "MIT",
+  "license": "ISC",
   "homepage": "https://github.com/ch32-libraries/Ticker",
   "frameworks": "ch32v003fun",
   "platforms": "ch32v",
